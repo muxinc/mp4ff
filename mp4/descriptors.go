@@ -207,7 +207,7 @@ type DecoderConfigDescriptor struct {
 	BufferSizeDB        uint32
 	MaxBitrate          uint32
 	AvgBitrate          uint32
-	DecSpecificInfo     DecSpecificInfoDescriptor
+	DecSpecificInfo     *DecSpecificInfoDescriptor
 }
 
 func DecodeDecoderConfigDescriptor(sr bits.SliceReader) (DecoderConfigDescriptor, error) {
@@ -229,9 +229,11 @@ func DecodeDecoderConfigDescriptor(sr bits.SliceReader) (DecoderConfigDescriptor
 	dd.BufferSizeDB = streamTypeAndBufferSizeDB & 0xffffff
 	dd.MaxBitrate = sr.ReadUint32()
 	dd.AvgBitrate = sr.ReadUint32()
-	dd.DecSpecificInfo, err = DecodeDecSpecificInfoDescriptor(sr)
-	if err != nil {
-		return dd, err
+	if size > 13 {
+		dd.DecSpecificInfo, err = DecodeDecSpecificInfoDescriptor(sr)
+		if err != nil {
+			return dd, err
+		}
 	}
 	if size != dd.Size() {
 		return dd, fmt.Errorf("read size %d differs from calculated size %d", size, dd.Size())
@@ -244,7 +246,11 @@ func (d *DecoderConfigDescriptor) Tag() byte {
 }
 
 func (d *DecoderConfigDescriptor) Size() uint32 {
-	return 13 + d.DecSpecificInfo.SizeSize()
+	size := uint32(13)
+	if d.DecSpecificInfo != nil {
+		size += d.DecSpecificInfo.SizeSize()
+	}
+	return size
 }
 
 func (d *DecoderConfigDescriptor) SizeSize() uint32 {
@@ -259,9 +265,11 @@ func (d *DecoderConfigDescriptor) EncodeSW(sw bits.SliceWriter) error {
 	sw.WriteUint32(streamTypeAndBufferSizeDB)
 	sw.WriteUint32(d.MaxBitrate)
 	sw.WriteUint32(d.AvgBitrate)
-	err := d.DecSpecificInfo.EncodeSW(sw)
-	if err != nil {
-		return err
+	if d.DecSpecificInfo != nil {
+		err := d.DecSpecificInfo.EncodeSW(sw)
+		if err != nil {
+			return err
+		}
 	}
 	return sw.AccError()
 }
@@ -271,20 +279,20 @@ type DecSpecificInfoDescriptor struct {
 	DecConfig           []byte
 }
 
-func DecodeDecSpecificInfoDescriptor(sr bits.SliceReader) (DecSpecificInfoDescriptor, error) {
+func DecodeDecSpecificInfoDescriptor(sr bits.SliceReader) (*DecSpecificInfoDescriptor, error) {
 	dd := DecSpecificInfoDescriptor{}
 	tag := sr.ReadUint8()
 	if tag != DecSpecificInfoTag {
-		return dd, fmt.Errorf("got tag %d instead of DecSpecificInfoTag %d", tag, DecSpecificInfoTag)
+		return &dd, fmt.Errorf("got tag %d instead of DecSpecificInfoTag %d", tag, DecSpecificInfoTag)
 	}
 
 	sizeFieldSizeMinus1, size, err := readSizeSize(sr)
 	if err != nil {
-		return dd, err
+		return &dd, err
 	}
 	dd.sizeFieldSizeMinus1 = sizeFieldSizeMinus1
 	dd.DecConfig = sr.ReadBytes(int(size))
-	return dd, sr.AccError()
+	return &dd, sr.AccError()
 }
 
 func (d *DecSpecificInfoDescriptor) Tag() byte {
@@ -406,7 +414,7 @@ func CreateESDescriptor(decConfig []byte) ESDescriptor {
 		DecConfigDescriptor: DecoderConfigDescriptor{
 			ObjectType: 0x40, // Audio ISO/IEC 14496-3,
 			StreamType: 0x15, // 0x5 << 2 + 0x01 (audioType + upstreamFlag + reserved)
-			DecSpecificInfo: DecSpecificInfoDescriptor{
+			DecSpecificInfo: &DecSpecificInfoDescriptor{
 				DecConfig: decConfig,
 			},
 		},

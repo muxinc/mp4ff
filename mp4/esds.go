@@ -96,6 +96,8 @@ func (e *EsdsBox) Info(w io.Writer, specificBoxLevels, indent, indentStep string
 	bd := newInfoDumper(w, indent, e, int(e.Version), e.Flags)
 	bd.write(" - maxBitrate: %d", e.DecConfigDescriptor.MaxBitrate)
 	bd.write(" - avgBitrate: %d", e.DecConfigDescriptor.AvgBitrate)
-	bd.write(" - decConfig: %s", hex.EncodeToString(e.DecConfigDescriptor.DecSpecificInfo.DecConfig))
+	if e.DecConfigDescriptor.DecSpecificInfo != nil {
+		bd.write(" - decConfig: %s", hex.EncodeToString(e.DecConfigDescriptor.DecSpecificInfo.DecConfig))
+	}
 	return bd.err
 }
