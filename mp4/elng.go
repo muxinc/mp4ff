@@ -30,8 +30,9 @@ func DecodeElng(hdr BoxHeader, startPos uint64, r io.Reader) (Box, error) {
 
 // DecodeElngSR - box-specific decode
 func DecodeElngSR(hdr BoxHeader, startPos uint64, sr bits.SliceReader) (Box, error) {
+	sr.SkipBytes(4)
 	b := &ElngBox{
-		Language: string(sr.ReadZeroTerminatedString(hdr.payloadLen())),
+		Language: string(sr.ReadZeroTerminatedString(hdr.payloadLen()-4)),
 	}
 	return b, sr.AccError()
 }
@@ -43,7 +44,7 @@ func (b *ElngBox) Type() string {
 
 // Size - calculated size of box
 func (b *ElngBox) Size() uint64 {
-	return uint64(boxHeaderSize + len(b.Language) + 1)
+	return uint64(boxHeaderSize + len(b.Language) + 5)
 }
 
 // Encode - write box to w
