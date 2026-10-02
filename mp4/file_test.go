@@ -371,8 +371,8 @@ func TestEmptyMdat(t *testing.T) {
 				if err != nil {
 					t.Error(err)
 				}
-				mdat := decFile.Mdat
-				if mdat.Size() == 8 {
+				mdat := decFile.Mdats
+				if mdat[0].Size() == 8 {
 					t.Error("f.Mdat points to empty file although there is a non-empty mdat")
 				}
 			})

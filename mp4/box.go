@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"math"
 
 	"github.com/Eyevinn/mp4ff/bits"
 )
@@ -326,7 +327,7 @@ func DecodeBox(startPos uint64, r io.Reader) (Box, error) {
 	return b, nil
 }
 
-// DecodeBoxLazyMdat decodes a box but doesn't read mdat into memory
+// DecodeBoxLazyMdat decodes a box without reading mdat, free, or skip payloads into memory.
 func DecodeBoxLazyMdat(startPos uint64, r io.ReadSeeker) (Box, error) {
 	var err error
 	var b Box
@@ -338,16 +339,18 @@ func DecodeBoxLazyMdat(startPos uint64, r io.ReadSeeker) (Box, error) {
 
 	d, ok := decoders[h.Name]
 
-	remainingLength := int64(h.Size) - int64(h.Hdrlen)
-
 	if !ok {
 		b, err = DecodeUnknown(h, startPos, r)
 	} else {
 		switch h.Name {
-		case "mdat":
-			b, err = DecodeMdatLazily(h, startPos)
+		case "mdat", "free", "skip":
+			err = seekPastBoxBody(r, h)
 			if err == nil {
-				_, err = r.Seek(remainingLength, io.SeekCurrent)
+				if h.Name == "mdat" {
+					b, err = DecodeMdatLazily(h, startPos)
+				} else {
+					b = &FreeBox{Name: h.Name, lazySize: h.Size}
+				}
 			}
 		default:
 			b, err = d(h, startPos, r)
@@ -358,6 +361,28 @@ func DecodeBoxLazyMdat(startPos uint64, r io.ReadSeeker) (Box, error) {
 	}
 
 	return b, nil
+}
+
+// seekPastBoxBody validates a skipped payload against the actual stream bounds
+// before converting its size or seeking. The reader is positioned after the header.
+func seekPastBoxBody(r io.ReadSeeker, h BoxHeader) error {
+	if h.Size < uint64(h.Hdrlen) || h.Size > math.MaxInt64 {
+		return fmt.Errorf("invalid box size %d", h.Size)
+	}
+	bodyStart, err := r.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return err
+	}
+	end, err := r.Seek(0, io.SeekEnd)
+	if err != nil {
+		return err
+	}
+	bodySize := int64(h.Size) - int64(h.Hdrlen)
+	if bodyStart < int64(h.Hdrlen) || end < bodyStart || bodySize > end-bodyStart {
+		return fmt.Errorf("box size %d exceeds file bounds", h.Size)
+	}
+	_, err = r.Seek(bodyStart+bodySize, io.SeekStart)
+	return err
 }
 
 // Fixed16 - An 8.8 fixed point number

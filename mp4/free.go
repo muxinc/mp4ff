@@ -1,6 +1,7 @@
 package mp4
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/Eyevinn/mp4ff/bits"
@@ -10,6 +11,8 @@ import (
 type FreeBox struct {
 	Name       string
 	notDecoded []byte
+	// lazySize preserves the full on-disk size when padding is skipped.
+	lazySize uint64
 }
 
 // DecodeFree - box-specific decode
@@ -33,11 +36,17 @@ func (b *FreeBox) Type() string {
 
 // Size - calculated size of box
 func (b *FreeBox) Size() uint64 {
+	if b.lazySize != 0 {
+		return b.lazySize
+	}
 	return uint64(boxHeaderSize + len(b.notDecoded))
 }
 
 // Encode - write box to w
 func (b *FreeBox) Encode(w io.Writer) error {
+	if b.lazySize != 0 {
+		return fmt.Errorf("cannot encode lazily decoded %s box", b.Name)
+	}
 	sw := bits.NewFixedSliceWriter(int(b.Size()))
 	err := b.EncodeSW(sw)
 	if err != nil {
@@ -49,6 +58,9 @@ func (b *FreeBox) Encode(w io.Writer) error {
 
 // EncodeSW - box-specific encode to slicewriter
 func (b *FreeBox) EncodeSW(sw bits.SliceWriter) error {
+	if b.lazySize != 0 {
+		return fmt.Errorf("cannot encode lazily decoded %s box", b.Name)
+	}
 	err := EncodeHeaderSW(b, sw)
 	if err != nil {
 		return err
