@@ -58,7 +58,7 @@ type DecFileMode byte
 const (
 	// DecModeNormal - read Mdat data into memory during file decoding.
 	DecModeNormal DecFileMode = iota
-	// DecModeLazyMdat - do not read mdat data into memory.
+	// DecModeLazyMdat - do not read mdat, free, or skip payloads into memory.
 	// Thus, decode process requires less memory and faster.
 	DecModeLazyMdat
 )
